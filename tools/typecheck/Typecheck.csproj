@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compiles the WPF app's code on Linux against reference assemblies built from github.com/dotnet/wpf (ref/*.cs).
+       Only checks that the code compiles; the real app is built on Windows (see the workflow). Usage: tools/typecheck.sh -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CA1416;WPF0001</NoWarn>
+    <WpfRef Condition="'$(WpfRef)' == ''">$(HOME)/wpfref/bin/Release/net10.0/WpfAll.dll</WpfRef>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+    <Compile Include="../../src/IbraCare.App/**/*.cs" />
+    <ProjectReference Include="../../src/IbraCare.Core/IbraCare.Core.csproj" />
+    <Reference Include="WpfAll"><HintPath>$(WpfRef)</HintPath></Reference>
+  </ItemGroup>
+</Project>

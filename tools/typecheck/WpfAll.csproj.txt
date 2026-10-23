@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>WpfAll</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoWarn>$(NoWarn);0618;0436;1058;1705;3001;3002;3003;3009;3024;0067;0108;0114;0809;8981;CS0672;SYSLIB0003;SYSLIB0051;SYSLIB0011;CS0612;WPF0001</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(WpfSrc)/System.Xaml/ref/System.Xaml.cs" />
+    <Compile Include="$(WpfSrc)/WindowsBase/ref/WindowsBase.cs" />
+    <Compile Include="$(WpfSrc)/UIAutomation/UIAutomationTypes/ref/UIAutomationTypes.cs" />
+    <Compile Include="$(WpfSrc)/UIAutomation/UIAutomationProvider/ref/UIAutomationProvider.cs" />
+    <Compile Include="$(WpfSrc)/System.Windows.Input.Manipulations/ref/System.Windows.Input.Manipulations.cs" />
+    <Compile Include="$(WpfSrc)/PresentationCore/ref/PresentationCore.cs" />
+    <Compile Include="$(WpfSrc)/PresentationFramework/ref/PresentationFramework.cs" />
+    <Compile Include="$(WpfSrc)/ReachFramework/ref/ReachFramework.cs" />
+    <Compile Include="$(WpfSrc)/System.Printing/ref/System.Printing.cs" />
+    <Compile Include="Stubs.cs" />
+  </ItemGroup>
+</Project>

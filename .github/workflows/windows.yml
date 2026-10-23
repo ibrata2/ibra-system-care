@@ -1,0 +1,123 @@
+name: Build IBRA SYSTEM CARE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Engine tests (real files, fonts, Google Fonts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Run tests
+        run: tests/run.sh
+
+  build:
+    name: Windows app, self-test, installer
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version
+        id: v
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "IBRA SYSTEM CARE $version"
+
+      - name: Publish the app
+        run: |
+          dotnet publish src/IbraCare.App/IbraCare.App.csproj -c Release -r win-x64 --self-contained -p:Version=${{ steps.v.outputs.version }} -p:DebugType=none -o build/publish
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (!(Test-Path build/publish/IbraSystemCare.exe)) { throw "IbraSystemCare.exe was not built" }
+
+      - name: Self-test on real Windows (reads only; uses its own test folder)
+        run: |
+          $p = Start-Process build/publish/IbraSystemCare.exe -ArgumentList "--selftest", "selftest.txt" -Wait -PassThru
+          Get-Content selftest.txt
+          if ($p.ExitCode -ne 0) { throw "self-test failed" }
+
+      - name: Snapshots of every page (Arabic dark, English light)
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force build/snapshots | Out-Null
+          Start-Process build/publish/IbraSystemCare.exe -ArgumentList "--snapshot", "build/snapshots", "--theme", "dark", "--lang", "ar" -Wait
+          Start-Process build/publish/IbraSystemCare.exe -ArgumentList "--snapshot", "build/snapshots", "--theme", "light", "--lang", "en" -Wait
+          Get-ChildItem build/snapshots | Format-Table Name, Length
+          Get-ChildItem build/snapshots -Filter *.txt | ForEach-Object { Write-Host "== $($_.Name)"; Get-Content $_ }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapshots
+          path: |
+            build/snapshots/*
+            selftest.txt
+
+      - name: Check the update search reads GitHub
+        continue-on-error: true
+        run: |
+          Start-Process build/publish/IbraSystemCare.exe -ArgumentList "--check-update", "update.txt" -Wait
+          Get-Content update.txt
+
+      - name: Make sure Inno Setup has Arabic
+        run: |
+          $inno = "${env:ProgramFiles(x86)}\Inno Setup 6"
+          if (!(Test-Path "$inno\ISCC.exe")) { choco install innosetup -y --no-progress }
+          if (!(Test-Path "$inno\Languages\Arabic.isl")) {
+            Invoke-WebRequest "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/Arabic.isl" -OutFile "$inno\Languages\Arabic.isl"
+          }
+
+      - name: Build the installer
+        working-directory: installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q /DAppVersion=${{ steps.v.outputs.version }} "/DSource=..\build\publish" IbraSystemCare.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-FileHash ..\build\installer\IBRA-System-Care-Setup.exe -Algorithm SHA256 | Format-List
+
+      - name: Portable zip
+        run: Compress-Archive -Path build/publish/* -DestinationPath build/installer/IBRA-System-Care-Portable-x64.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IBRA-System-Care-Setup
+          path: build/installer/*
+
+      - name: Publish a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: IBRA SYSTEM CARE ${{ steps.v.outputs.version }}
+          make_latest: true
+          files: |
+            build/installer/IBRA-System-Care-Setup.exe
+            build/installer/IBRA-System-Care-Portable-x64.zip
+          body: |
+            ## IBRA SYSTEM CARE ${{ steps.v.outputs.version }}
+            صيانة وتنظيف وإصلاح Windows 11 — تصميم وتطوير وتعريب **إبراهيم الخزرجي**
+
+            - **IBRA Deep Cleaner** — تنظيف آمن مع معاينة كل ملف، حجر قابل للتراجع
+            - **IBRA Font Doctor** — الخطوط التالفة والمكررة، اتصال الحروف العربية، مشاكل Photoshop، خطوط موثوقة من Google Fonts
+            - **IBRA Repair Center** — السجل، النسخ الاحتياطية، التقارير، التراجع
+
+            **التثبيت:** حمّل **IBRA-System-Care-Setup.exe** وشغّله. إذا ظهر تحذير Windows: More info ← Run anyway.
+            أو استخدم النسخة المحمولة **IBRA-System-Care-Portable-x64.zip** (فك الضغط وشغّل IbraSystemCare.exe).

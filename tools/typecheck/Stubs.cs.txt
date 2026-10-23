@@ -1,0 +1,14 @@
+namespace System.IO.Packaging {
+  public abstract class Package : System.IDisposable { public void Dispose(){} }
+  public abstract class PackagePart {}
+  public enum CompressionOption { NotCompressed=-1, Normal=0, Maximum=1, Fast=2, SuperFast=3 }
+  public enum EncryptionOption { None=0, RightsManagement=1 }
+  public sealed class PackageRelationshipSelector {}
+  public abstract class PackageProperties : System.IDisposable { public void Dispose(){} }
+  public class PackageRelationship {}
+  public enum TargetMode { Internal, External }
+  public class ZipPackage : Package {}
+  public class ZipPackagePart : PackagePart {}
+}
+namespace System.Security.Cryptography.Xml { public class Signature{} public class Reference{} public class DataObject{} }
+namespace System.Xaml.Permissions { public class XamlAccessLevel {} public class XamlLoadPermission {} }
