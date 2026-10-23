@@ -53,7 +53,11 @@ jobs:
       - name: Self-test on real Windows (reads only; uses its own test folder)
         run: |
           $p = Start-Process build/publish/IbraSystemCare.exe -ArgumentList "--selftest", "selftest.txt" -Wait -PassThru
+          if (!(Test-Path selftest.txt)) { Write-Host "::error::self-test wrote no report (exit $($p.ExitCode))"; Get-Content "$env:LOCALAPPDATA/IBRA System Care/log.txt" -ErrorAction SilentlyContinue; exit 1 }
           Get-Content selftest.txt
+          # Each failing check becomes an annotation, so it can be read on the run page without opening the log.
+          Get-Content selftest.txt | Where-Object { $_ -match '^(FAIL|CRASH)' } | Select-Object -First 9 | ForEach-Object { Write-Host "::error::$($_ -replace '\r?\n',' ' | ForEach-Object { $_.Substring(0, [Math]::Min(900, $_.Length)) })" }
+          Get-Content selftest.txt | Where-Object { $_ -match '^\s+(fonts=|photoshop|userTemp)' } | ForEach-Object { Write-Host "::notice::$_" }
           if ($p.ExitCode -ne 0) { throw "self-test failed" }
 
       - name: Snapshots of every page (Arabic dark, English light)

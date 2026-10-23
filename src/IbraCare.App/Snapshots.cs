@@ -140,7 +140,7 @@ public static class SelfTest
         catch (Exception e)
         {
             failed++;
-            lines.Add("CRASH " + e);
+            lines.Add("CRASH " + e.ToString().Replace("\r", " ").Replace("\n", " | "));
         }
         finally
         {
