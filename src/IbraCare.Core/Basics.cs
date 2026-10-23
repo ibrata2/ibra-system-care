@@ -184,10 +184,14 @@ public static class Platform
 {
     public static bool IsWindows => OperatingSystem.IsWindows();
 
+    /// <summary>Tests set this to act as an administrator or a normal user, whoever runs them.</summary>
+    public static bool? AdminOverride { get; set; }
+
     public static bool IsAdmin
     {
         get
         {
+            if (AdminOverride is { } forced) return forced;
             if (!OperatingSystem.IsWindows()) return Environment.UserName == "root";
             try
             {

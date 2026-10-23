@@ -268,6 +268,10 @@ try
     // ------------------------------------------------------------------
     Section("Font Doctor — repairs with backup and undo");
     var corrupt = fonts.Files.Where(f => f.IsCorrupt).ToList();
+    Platform.AdminOverride = false;
+    var refused = FontRepair.RemoveFonts(corrupt, "fix.corrupt", reg);
+    Check(!refused.Ok && File.Exists(Path.Combine(sysFonts, "broken.ttf")), "without administrator rights a font for all users is not touched");
+    Platform.AdminOverride = true;
     var rm = FontRepair.RemoveFonts(corrupt, "fix.corrupt", reg);
     Check(rm.Ok && !File.Exists(Path.Combine(sysFonts, "broken.ttf")), "the damaged font is removed");
     Check(reg.Get(Hive.LocalMachine, FontInventory.FontsKey, "Broken (TrueType)") is null, "its registry line is removed");
