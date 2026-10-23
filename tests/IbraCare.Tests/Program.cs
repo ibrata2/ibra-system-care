@@ -96,6 +96,7 @@ try
     Check(!Safety.IsAcceptableRoot(Fake("Users", "me", "AppData", "Local"), out _), "LocalAppData itself is refused");
     Check(Safety.IsAcceptableRoot(Fake("Users", "me", "AppData", "Local", "Temp"), out _), "the Temp folder is accepted");
     Check(!Safety.IsAcceptableRoot(Paths.AppData, out _), "the app's own data folder is refused");
+    Check(Safety.IsAcceptableRoot(work, out _), "a folder that contains the app's data is still accepted (its data is skipped while scanning)");
     Check(Safety.IsInside("/a/b/c", "/a/b") && !Safety.IsInside("/a/bc", "/a/b"), "inside-folder test does not confuse /a/bc with /a/b");
     var keep = new Safety.KeepRules(["*.keep", Fake("Users", "me", "AppData", "Local", "Temp", "mine"), "%TEMP%/report-??.txt"]);
     Check(keep.Matches(Fake("x", "a.keep")), "keep rule by name pattern");
@@ -135,6 +136,8 @@ try
     Check(tempScan.Skipped.GetValueOrDefault(SkipReason.Link) == 2, "Temp: links are not followed");
     Check(tempScan.Items.All(i => !i.Path.Contains("precious")), "Temp: nothing outside Temp is listed");
     Check(tempScan.Roots.Count == 1, "Temp: %TEMP% and LocalAppData\\Temp count once");
+    var ownInside = scanner.ScanTarget(new CleanTarget { Id = "userTemp", Roots = [work], MinAgeHours = 0 });
+    Check(ownInside.Items.All(i => !Safety.IsInside(i.Path, Paths.AppData)) && ownInside.Skipped.GetValueOrDefault(SkipReason.OwnData) > 0, "the app's own data is skipped inside a scanned folder");
     var chromeScan = report.Targets[1];
     Check(chromeScan.Items.Count == 2, "Chrome: cache of every profile found, Login Data untouched");
     Check(report.Targets[2].Items.Count == 1 && report.Targets[2].Items[0].Path.EndsWith(".dmp"), "Crash dumps: only *.dmp");

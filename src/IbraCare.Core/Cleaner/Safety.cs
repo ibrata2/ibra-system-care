@@ -59,7 +59,9 @@ public static class Safety
             reason = L.T("safety.forbidden");
             return false;
         }
-        if (ProtectedTrees().Any(p => IsInside(n, p) || IsInside(p, n)))
+        // A root inside the app's own data is refused; a root that contains it (e.g. Temp, if the data folder were moved there)
+        // is fine, because the scan skips the app's data wherever it meets it.
+        if (ProtectedTrees().Any(p => IsInside(n, p)))
         {
             reason = L.T("safety.ownData");
             return false;
