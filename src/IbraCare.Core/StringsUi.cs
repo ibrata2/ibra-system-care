@@ -161,6 +161,11 @@ public static partial class Strings
         A("fonts.joinNo", "الحروف تظهر منفصلة في هذا الخط — استخدم بديلاً متوافقاً.", "Letters appear disconnected in this font — use a compatible alternative.");
         A("fonts.joinUnknown", "لا يحتوي الخط على حروف عربية للاختبار.", "The font has no Arabic letters to test.");
         A("fonts.sample", "بسم الله الرحمن الرحيم — گچپژ ١٢٣", "بسم الله الرحمن الرحيم — گچپژ ١٢٣");
+        A("fonts.legacyTitle", "وُجد {0} خط عربي قديم يحتاج تحويلاً", "{0} old Arabic fonts need converting");
+        A("fonts.legacyText", "خطوط مثل FS_ صُنعت في التسعينات بترميز قديم، لذلك لا تكتب العربية في Photoshop الحديث. التحويل يضيف لها Unicode وقواعد وصل الحروف ولام ألف والتشكيل، ويحافظ على شكلها واسمها. تُحفظ نسخة احتياطية ويمكن التراجع.", "Fonts like FS_ were made in the 1990s with an old encoding, so they can't type Arabic in current Photoshop. Converting adds Unicode, letter joining, lam-alef and diacritics, keeping their look and name. A backup is kept and it can be undone.");
+        A("fonts.legacyConvertAll", "تحويل الكل", "Convert all");
+        A("fonts.willConvert", "تحويل إلى Unicode (مع نسخة احتياطية)", "Convert to Unicode (backed up)");
+        A("fonts.legacyDone", "أغلق Photoshop بالكامل وافتحه من جديد. الخطوط المحوّلة تظهر بنفس أسمائها وتكتب العربية متصلة.", "Quit Photoshop completely and open it again. The converted fonts keep their names and type joined Arabic.");
         A("fonts.removeThis", "إزالة هذا الخط", "Remove this font");
         A("fonts.colArabic", "العربية", "Arabic");
         A("fonts.colLatin", "الإنجليزية", "English");

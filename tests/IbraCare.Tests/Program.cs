@@ -304,6 +304,50 @@ try
     Check(File.Exists(Path.Combine(cache, "fntsub", "Fonts.dat")), "undo brings the cache back");
 
     // ------------------------------------------------------------------
+    Section("Old Arabic fonts (FS_ style) → Unicode");
+    var legacyPath = Path.Combine(dataDir, "LegacyArabicTest.ttf");
+    var legacyBytes = File.ReadAllBytes(legacyPath);
+    Check(LegacyArabic.Analyze(legacyBytes, out _) is null, "the old-style font is recognised as convertible");
+    Check(LegacyArabic.Analyze(File.ReadAllBytes(arabicFont), out _) == "legacy.hasLayout", "a modern Arabic font is not touched");
+    Check(LegacyArabic.Analyze(File.ReadAllBytes(latinFont), out _) is not null, "a Latin font is not touched");
+    var before = OpenType.Parse(legacyBytes)[0];
+    Check(before.IsSymbolEncoded && FontInventory.Analyze(new FontFileInfo { Path = legacyPath, LegacyConvertible = true }, before).Arabic == ArabicSupport.LegacySymbol, "before: symbol-encoded, flagged as old Arabic");
+    var conv = LegacyArabic.Convert(legacyBytes);
+    var after = OpenType.Parse(conv.Data)[0];
+    Check(!after.IsCorrupt && after.Warnings.Count == 0, $"after: valid font, checksums right ({string.Join(",", after.Problems.Concat(after.Warnings))})");
+    Check(after.HasUnicodeCmap && !after.IsSymbolEncoded, "after: Unicode cmap");
+    Check(after.ArabicFeatures.IsSupersetOf(["init", "medi", "fina", "rlig"]), $"after: Arabic joining features ({string.Join(" ", after.ArabicFeatures)})");
+    Check(after.GposFeatures.Contains("mark"), "after: harakat positioned (GPOS mark)");
+    Check(after.Coverage.Contains(0x0627) && after.Coverage.Contains(0x0644) && after.Coverage.Contains(0x0661) && after.Coverage.Contains(0xF241), "after: ا ل ١ mapped, old private codes still mapped");
+    Check(after.Family == before.Family, "after: same family name, so existing designs keep it");
+    Check(after.VersionText.Contains(LegacyArabic.VersionTag), "after: version marked as converted");
+    Check(conv.LamAlefs >= 2 && conv.Joined > 20, $"lam-alef ligatures and joining forms built ({conv.LamAlefs}, {conv.Joined})");
+    Check(!LegacyArabic.CanConvert(conv.Data), "a converted font is not converted twice");
+    var shapingCheck = Environment.GetEnvironmentVariable("IBRACARE_SHAPING_OUT");
+    if (!string.IsNullOrEmpty(shapingCheck)) File.WriteAllBytes(shapingCheck, conv.Data);
+
+    // Through the Font Doctor: scan, convert with backup, registry pointed at the new file, undo.
+    var legacyInstalled = Path.Combine(usrFonts, "FS_Test.ttf");
+    File.Copy(legacyPath, legacyInstalled, true);
+    reg.Set(Hive.CurrentUser, FontInventory.FontsKey, new RegValue("Legacy Arabic Test (TrueType)", "String", legacyInstalled));
+    var fonts2 = FontInventory.Scan(reg);
+    var legacyIssue = fonts2.Issues.FirstOrDefault(i => i.Path == legacyInstalled && i.Fix == FontFix.ConvertLegacy);
+    Check(legacyIssue is not null, "the scan offers 'Convert to Unicode' for it");
+    Check(PhotoshopDoctor.Diagnose(fonts2, reg).Findings.Any(f => f.Code == "ps.legacy" && f.Fix == FontFix.ConvertLegacy), "the Photoshop check offers the conversion too");
+    var legacyFile = fonts2.Files.First(f => f.Path == legacyInstalled);
+    var cv = FontRepair.ConvertLegacy([legacyFile], reg);
+    var converted = Path.Combine(usrFonts, "FS_Test-IBRA.ttf");
+    Check(cv.Ok && File.Exists(converted) && !File.Exists(legacyInstalled), "converted file written, old one removed");
+    Check(reg.Get(Hive.CurrentUser, FontInventory.FontsKey, "Legacy Arabic Test (TrueType)")?.Data == converted, "Windows now loads the converted file");
+    var fonts3 = FontInventory.Scan(reg);
+    Check(fonts3.Faces.Any(f => f.File.Path == converted && f.ArabicLetters >= 14 && f.Arabic != ArabicSupport.LegacySymbol && f.Face.ArabicFeatures.IsSupersetOf(["init", "medi", "fina", "rlig"])) && !fonts3.Issues.Any(i => i.Fix == FontFix.ConvertLegacy), "a new scan sees joined Arabic and nothing left to convert");
+    var undoConv = Journal.Undo(cv.Entry!, reg);
+    Check(undoConv.Ok && File.Exists(legacyInstalled) && !File.Exists(converted), "undo brings the old font back and removes the converted one");
+    Check(reg.Get(Hive.CurrentUser, FontInventory.FontsKey, "Legacy Arabic Test (TrueType)")?.Data == legacyInstalled, "undo restores the registry line");
+    File.Delete(legacyInstalled);
+    reg.Delete(Hive.CurrentUser, FontInventory.FontsKey, "Legacy Arabic Test (TrueType)");
+
+    // ------------------------------------------------------------------
     Section("Reports and backups");
     L.Language = "en";
     var html = Reports.Build(report, fonts, ps);

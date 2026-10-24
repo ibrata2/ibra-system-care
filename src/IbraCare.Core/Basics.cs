@@ -98,6 +98,13 @@ public static class Env
     }
 }
 
+/// <summary>The developer's channels, shown in the app and the reports.</summary>
+public static class Links
+{
+    public const string Telegram = "https://t.me/ibraprogram";
+    public const string TikTok = "https://www.tiktok.com/@ibraprogram";
+}
+
 public static class Json
 {
     public static readonly JsonSerializerOptions Options = new()

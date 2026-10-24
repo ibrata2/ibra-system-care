@@ -45,8 +45,10 @@ public static class PhotoshopDoctor
 
         // 4. Arabic fonts that will appear disconnected or reversed.
         foreach (var f in fonts.Faces.Where(f => f.Arabic is ArabicSupport.LegacySymbol or ArabicSupport.PresentationFormsOnly or ArabicSupport.NoShaping))
-            r.Findings.Add(new FontIssue { Severity = Severity.Warning, Code = "ps.arabic", Path = f.File.Path, FontName = f.Name, Fix = FontFix.InstallAlternative,
-                Message = L.T(f.Arabic == ArabicSupport.LegacySymbol ? "ps.f.legacy" : "ps.f.disconnected") });
+            r.Findings.Add(f.File.LegacyConvertible
+                ? new FontIssue { Severity = Severity.Warning, Code = "ps.legacy", Path = f.File.Path, FontName = f.Name, Fix = FontFix.ConvertLegacy, Message = L.T("ps.f.convertible") }
+                : new FontIssue { Severity = Severity.Warning, Code = "ps.arabic", Path = f.File.Path, FontName = f.Name, Fix = FontFix.InstallAlternative,
+                    Message = L.T(f.Arabic == ArabicSupport.LegacySymbol ? "ps.f.legacy" : "ps.f.disconnected") });
 
         // 5. Fonts without Windows names do not show (or show under another name) in Photoshop's menu.
         foreach (var f in fonts.Faces.Where(f => !f.Face.HasWindowsNames))

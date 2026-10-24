@@ -90,7 +90,7 @@ public sealed class FontsPage : CarePage
         g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var issues = scan.Issues.OrderBy(i => i.Severity).ThenBy(i => i.FontName).ToList();
         _ticked.Clear();
-        foreach (var i in issues.Where(i => i.Fix is FontFix.RemoveFont or FontFix.RemoveRegistration or FontFix.RemoveDuplicate)) _ticked.Add(i);
+        foreach (var i in issues.Where(i => Actionable(i.Fix))) _ticked.Add(i);
 
         var tools = Ui.Columns(new GridLength(1, GridUnitType.Star), GridLength.Auto);
         tools.Children.Add(Ui.Text(L.T("fonts.problemsSummary", Fmt.Count(issues.Count(i => i.Severity == Severity.Error)), Fmt.Count(issues.Count(i => i.Severity == Severity.Warning)), Fmt.Count(issues.Count(i => i.Severity == Severity.Info))), 13, Theme.Ink, bold: true));
@@ -99,6 +99,24 @@ public sealed class FontsPage : CarePage
         tools.Children.Add(Ui.Row(alts, fix).Spaced().At(1));
         tools.Margin = new Thickness(0, 0, 0, 8);
         g.Children.Add(tools);
+        var legacy = issues.Where(i => i.Fix == FontFix.ConvertLegacy).ToList();
+        if (legacy.Count > 0)
+        {
+            g.RowDefinitions.Insert(1, new RowDefinition { Height = GridLength.Auto });
+            var banner = Ui.Columns(GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto);
+            banner.Children.Add(Ui.Glyph("\uE8D2", 22, Theme.Gold).Margin(0, 0, 12, 0));
+            banner.Children.Add(new StackPanel
+            {
+                Children =
+                {
+                    Ui.Text(L.T("fonts.legacyTitle", Fmt.Count(legacy.Select(i => i.Path).Distinct().Count())), 14, Theme.Ink, bold: true),
+                    Ui.Wrap(L.T("fonts.legacyText"), 12.5),
+                },
+            }.At(1));
+            banner.Children.Add(Ui.Button(L.T("fonts.legacyConvertAll"), "\uE8AB", Theme.PrimaryButton, async () => await Fix(legacy)).Margin(12, 0, 0, 0).At(2));
+            g.Children.Add(new Border { Child = banner, Background = Theme.GoldSoft, CornerRadius = new CornerRadius(8), Padding = new Thickness(14, 12, 14, 12), Margin = new Thickness(0, 0, 0, 10) }.At(0, 1));
+        }
+        var listRow = legacy.Count > 0 ? 2 : 1;
         if (issues.Count == 0)
         {
             g.Children.Add(Common.Empty("", L.T("fonts.noProblems")).At(0, 1));
@@ -108,7 +126,7 @@ public sealed class FontsPage : CarePage
             ("", 36, o =>
             {
                 var i = (FontIssue)o;
-                if (i.Fix is not (FontFix.RemoveFont or FontFix.RemoveRegistration or FontFix.RemoveDuplicate)) return new Border();
+                if (!Actionable(i.Fix)) return new Border();
                 var c = new CheckBox { Style = Theme.CheckBox, IsChecked = _ticked.Contains(i), HorizontalAlignment = HorizontalAlignment.Center };
                 c.Checked += (_, _) => _ticked.Add(i);
                 c.Unchecked += (_, _) => _ticked.Remove(i);
@@ -122,9 +140,11 @@ public sealed class FontsPage : CarePage
         ]);
         list.ItemsSource = issues;
         list.MouseDoubleClick += (_, _) => { if (list.SelectedItem is FontIssue i) Ui.ShowInFolder(i.Path); };
-        g.Children.Add(Ui.Card(list, new Thickness(4)).At(0, 1));
+        g.Children.Add(Ui.Card(list, new Thickness(4)).At(0, listRow));
         return g;
     }
+
+    private static bool Actionable(FontFix f) => f is FontFix.RemoveFont or FontFix.RemoveRegistration or FontFix.RemoveDuplicate or FontFix.ConvertLegacy;
 
     private async Task FixTicked()
     {
@@ -142,9 +162,13 @@ public sealed class FontsPage : CarePage
             .Select(i => (Issue: i, File: scan.Files.FirstOrDefault(f => string.Equals(f.Path, i.Path, StringComparison.OrdinalIgnoreCase))))
             .Where(x => x.File is not null).ToList();
         var regs = issues.Where(i => i.Fix == FontFix.RemoveRegistration && i.Registration is not null).Select(i => i.Registration!).Distinct().ToList();
-        var lines = files.Select(f => $"{L.T("fonts.willRemove")}: {f.File!.Path}").Concat(regs.Select(r => $"{L.T("fonts.willUnregister")}: {r.Name} → {r.Data}")).ToList();
+        var convert = issues.Where(i => i.Fix == FontFix.ConvertLegacy && i.Path is not null)
+            .Select(i => scan.Files.FirstOrDefault(f => string.Equals(f.Path, i.Path, StringComparison.OrdinalIgnoreCase)))
+            .Where(f => f is not null).Select(f => f!).Distinct().ToList();
+        var lines = files.Select(f => $"{L.T("fonts.willRemove")}: {f.File!.Path}").Concat(regs.Select(r => $"{L.T("fonts.willUnregister")}: {r.Name} → {r.Data}"))
+            .Concat(convert.Select(f => $"{L.T("fonts.willConvert")}: {f.Path}")).ToList();
         if (lines.Count == 0) return;
-        if (files.Any(f => f.File!.Location == FontLocation.System) && !Platform.IsAdmin)
+        if ((files.Any(f => f.File!.Location == FontLocation.System) || convert.Any(f => f.Location == FontLocation.System)) && !Platform.IsAdmin)
         {
             if (Ui.Ask(null, L.T("fonts.adminNeededTitle"), L.T("fonts.adminNeeded"), L.T("ui.restartAdmin"), L.T("ui.cancel")) == 0) Program.RestartAsAdmin("fonts");
             return;
@@ -157,9 +181,14 @@ public sealed class FontsPage : CarePage
         if (corrupt.Count > 0 && await Common.Run(() => FontRepair.RemoveFonts(corrupt, "fix.corrupt"), _status) is { } a) results.Add(a);
         if (dups.Count > 0 && await Common.Run(() => FontRepair.RemoveFonts(dups, "fix.dup"), _status) is { } b) results.Add(b);
         if (regs.Count > 0 && await Common.Run(() => FontRepair.RemoveRegistrations(regs), _status) is { } c) results.Add(c);
+        if (convert.Count > 0)
+        {
+            var progress = new Progress<(int Done, int Total, string Name)>(p => _status.Report(p.Done, p.Total, p.Name));
+            if (await Common.Run(() => FontRepair.ConvertLegacy(convert, null, progress), _status) is { } d) results.Add(d);
+        }
         var ok = results.All(r => r.Ok);
         var restart = results.Any(r => r.NeedsRestart);
-        Ui.Ask(null, L.T(ok ? "fonts.fixedTitle" : "fonts.partlyFixedTitle"), L.T("fonts.fixedText") + (restart ? "\n" + L.T("fonts.restartNote") : ""),
+        Ui.Ask(null, L.T(ok ? "fonts.fixedTitle" : "fonts.partlyFixedTitle"), L.T("fonts.fixedText") + (restart ? "\n" + L.T("fonts.restartNote") : "") + (convert.Count > 0 ? "\n" + L.T("fonts.legacyDone") : ""),
             results.SelectMany(r => r.Lines).ToList(), L.T("ui.ok"));
         await Scan();
     }
@@ -221,8 +250,8 @@ public sealed class FontsPage : CarePage
             text.Children.Add(Ui.Text(first.Message, 13, Theme.Ink, bold: true, wrap: TextWrapping.Wrap));
             text.Children.Add(Ui.Wrap(string.Join(L.Sep, group.Select(f => f.FontName).Where(n => !string.IsNullOrEmpty(n)).Distinct().Take(12)) + (group.Count() > 12 ? "…" : ""), 12));
             g.Children.Add(text.At(1));
-            var fixable = group.Where(f => f.Fix is FontFix.RemoveFont or FontFix.RemoveDuplicate or FontFix.RemoveRegistration).ToList();
-            if (fixable.Count > 0) g.Children.Add(Ui.Button(L.T("ps.fixGroup"), "", Theme.Button, async () => await Fix(fixable)).Margin(10, 0, 0, 0).At(2));
+            var fixable = group.Where(f => Actionable(f.Fix)).ToList();
+            if (fixable.Count > 0) g.Children.Add(Ui.Button(L.T(first.Code == "ps.legacy" ? "fonts.legacyConvertAll" : "ps.fixGroup"), "", Theme.Button, async () => await Fix(fixable)).Margin(10, 0, 0, 0).At(2));
             else if (group.Any(f => f.Fix == FontFix.InstallAlternative)) g.Children.Add(Ui.Button(L.T("fonts.alternatives"), "", Theme.Button, ShowAlternatives).Margin(10, 0, 0, 0).At(2));
             sp.Children.Add(Ui.Card(g, new Thickness(12)).Margin(0, 0, 0, 6));
         }
@@ -403,6 +432,8 @@ public sealed class AllFontsView : Grid
 
         var actions = Ui.Row(Ui.Button(L.T("clean.openFolder"), "", Theme.Button, () => Ui.ShowInFolder(r.File.Path)));
         var removable = _scan.Issues.Where(i => string.Equals(i.Path, r.File.Path, StringComparison.OrdinalIgnoreCase) && i.Fix is FontFix.RemoveFont or FontFix.RemoveDuplicate).ToList();
+        var convertible = _scan.Issues.Where(i => string.Equals(i.Path, r.File.Path, StringComparison.OrdinalIgnoreCase) && i.Fix == FontFix.ConvertLegacy).Take(1).ToList();
+        if (convertible.Count > 0) actions.Children.Add(Ui.Button(L.T("fix.ConvertLegacy"), "\uE8AB", Theme.PrimaryButton, async () => await _page.Fix(convertible)));
         if (removable.Count > 0) actions.Children.Add(Ui.Button(L.T("fonts.removeThis"), "", Theme.DangerButton, async () => await _page.Fix(removable)));
         actions.Spaced();
         actions.Margin = new Thickness(0, 14, 0, 0);

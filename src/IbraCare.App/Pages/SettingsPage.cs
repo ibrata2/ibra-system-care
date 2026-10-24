@@ -159,7 +159,8 @@ public sealed class AboutPage : CarePage
         var row = Ui.Row(
             Ui.Button(L.T("about.updates"), "", Theme.PrimaryButton, () => Updater.ShowWindow(Window.GetWindow(this))),
             Ui.Button("GitHub", "", Theme.Button, () => Ui.Open("https://github.com/" + Program.Repo)),
-            Ui.Button("Telegram", "", Theme.Button, () => Ui.Open("https://t.me/ibraprogram"))).Spaced();
+            Ui.Button("Telegram", "", Theme.Button, () => Ui.Open(Links.Telegram)),
+            Ui.Button("TikTok", "", Theme.Button, () => Ui.Open(Links.TikTok))).Spaced();
         row.HorizontalAlignment = HorizontalAlignment.Center;
         row.Margin = new Thickness(0, 16, 0, 16);
         sp.Children.Add(row);

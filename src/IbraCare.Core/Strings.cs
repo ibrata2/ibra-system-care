@@ -240,6 +240,20 @@ public static partial class Strings
         A("ps.noCache", "لا توجد ذاكرة خطوط لهذا الإصدار", "There is no font cache for this version");
         A("ps.closeFirst", "أغلق Photoshop أولاً ثم أعد المحاولة.", "Close Photoshop first, then try again.");
 
+        // ---------- old Arabic fonts (FS_ and others) ----------
+        A("font.i.legacyConvertible", "خط عربي قديم بترميز الرموز (مثل خطوط FS_): الحروف لا تظهر أو تظهر منفصلة في Photoshop. يمكن تحويله إلى Unicode لتتصل حروفه مع الحفاظ على شكله واسمه.", "Old symbol-encoded Arabic font (like the FS_ fonts): letters don't show or come out disconnected in Photoshop. It can be converted to Unicode so its letters join, keeping its look and name.");
+        A("ps.f.convertible", "خط عربي قديم — يحتاج تحويلاً إلى Unicode حتى يشتغل في Photoshop الحديث", "Old Arabic font — needs converting to Unicode to work in current Photoshop");
+        A("fix.ConvertLegacy", "تحويل إلى Unicode", "Convert to Unicode");
+        A("fix.legacy.backup", "نسخة قبل تحويل {0} خط عربي قديم", "Backup before converting {0} old Arabic fonts");
+        A("fix.legacy.journal", "تحويل {0} خط عربي قديم إلى Unicode", "Converted {0} old Arabic fonts to Unicode");
+        A("fix.legacy.line", "{0} حرفاً، {1} شكل اتصال، {2} لام ألف", "{0} letters, {1} joining forms, {2} lam-alef");
+        A("legacy.notTrueType", "ليس خط TrueType قابلاً للتحويل", "Not a convertible TrueType font");
+        A("legacy.hasLayout", "الخط يحتوي جداول تشكيل مسبقاً", "The font already has layout tables");
+        A("legacy.noNames", "الخط لا يحتوي أسماء للحروف", "The font has no glyph names");
+        A("legacy.notArabicNames", "أسماء الحروف لا تطابق نمط الخطوط العربية القديمة", "Glyph names don't follow the old Arabic font scheme");
+        A("legacy.notSymbol", "الخط مرمز بـ Unicode أصلاً", "The font is already Unicode-encoded");
+        A("legacy.damaged", "ملف الخط تالف", "The font file is damaged");
+
         AddUi(A);
         return t;
     }

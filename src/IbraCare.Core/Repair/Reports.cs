@@ -35,7 +35,7 @@ public static class Reports
         </style></head><body>
         <h1>IBRA SYSTEM CARE</h1>
         <div class="sub">{{H(L.T("report.title"))}} — <span class="num">{{Fmt.Date(DateTime.Now)}}</span> — {{H(Environment.MachineName)}}</div>
-        <div class="sub">{{H(L.T("app.credit"))}}</div>
+        <div class="sub">{{H(L.T("app.credit"))}} — <a href="{{Links.Telegram}}" style="color:#D4AF37">Telegram</a> · <a href="{{Links.TikTok}}" style="color:#D4AF37">TikTok</a></div>
         """);
 
         if (clean is not null)

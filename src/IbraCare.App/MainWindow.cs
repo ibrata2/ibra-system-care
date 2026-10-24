@@ -83,6 +83,12 @@ public sealed class MainWindow : Window
         footer.Children.Add(_updateBox);
         if (Platform.IsAdmin) footer.Children.Add(Ui.Row(Ui.Glyph("", 13, Theme.Gold), Ui.Text(L.T("ui.runningAdmin"), 11.5, Theme.Gold)).Spaced(6).Margin(0, 0, 0, 8));
         footer.Children.Add(Ui.Wrap(L.T("app.credit"), 11));
+        var social = Ui.Row(
+            Ui.Button("Telegram", null, Theme.ToolButton, () => Ui.Open(Links.Telegram)),
+            Ui.Button("TikTok", null, Theme.ToolButton, () => Ui.Open(Links.TikTok)));
+        foreach (var b in social.Children.OfType<Button>()) { b.Padding = new Thickness(6, 3, 6, 3); b.FontSize = 11.5; b.Foreground = Theme.Gold; }
+        social.Margin = new Thickness(-6, 4, 0, 2);
+        footer.Children.Add(social);
         var ver = Ui.Ltr("v" + Program.Version, 11, Theme.Muted);
         footer.Children.Add(ver);
         DockPanel.SetDock(footer, Dock.Bottom);

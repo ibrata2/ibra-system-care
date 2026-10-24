@@ -20,6 +20,8 @@ public sealed class FontFileInfo
     public List<FontRegistration> Registrations { get; } = [];
     public string? Sha256 { get; set; }
     public string? ReadError { get; set; }
+    /// <summary>An old symbol-encoded Arabic font (like FS_) that <see cref="LegacyArabic"/> can convert to Unicode.</summary>
+    public bool LegacyConvertible { get; set; }
 
     public string FileName => System.IO.Path.GetFileName(Path);
     public bool IsCorrupt => ReadError is not null || Faces.Any(f => f.IsCorrupt);
@@ -56,7 +58,7 @@ public sealed class FontIssue
     public string? KeepPath { get; init; }
 }
 
-public enum FontFix { None, RemoveFont, RemoveRegistration, RemoveDuplicate, ClearPhotoshopCache, RebuildFontCache, InstallAlternative }
+public enum FontFix { None, RemoveFont, RemoveRegistration, RemoveDuplicate, ClearPhotoshopCache, RebuildFontCache, InstallAlternative, ConvertLegacy }
 
 public sealed class FontScan
 {
@@ -82,7 +84,7 @@ public static class FontInventory
     // Arabic letters every Arabic font must have: ء to ي without tatweel.
     private static readonly int[] CoreArabic = [.. Enumerable.Range(0x0621, 0x063A - 0x0621 + 1), .. Enumerable.Range(0x0641, 0x064A - 0x0641 + 1)];
     private static readonly int[] ExtendedArabic = [0x067E, 0x0686, 0x0698, 0x06AF, 0x06A4, 0x06A9, 0x06CC]; // پ چ ژ گ ڤ ک ی
-    private static readonly string[] LegacyArabicHints = ["arab", "naskh", "kufi", "thuluth", "diwani", "ruqaa", "ruqa", "farsi", "nastaliq", "af_", "ae_", "sultan", "hacen", "mudir", "traditional ar"];
+    private static readonly string[] LegacyArabicHints = ["arab", "naskh", "kufi", "thuluth", "diwani", "ruqaa", "ruqa", "farsi", "nastaliq", "af_", "ae_", "sultan", "hacen", "mudir", "traditional ar", "kofi", "diwan", "fs_"];
 
     public static FontScan Scan(IRegistryAccess? registry = null, IProgress<(int Done, int Total)>? progress = null, CancellationToken ct = default,
         IEnumerable<(string Dir, FontLocation Loc)>? extraFolders = null)
@@ -168,6 +170,7 @@ public static class FontInventory
             var data = System.IO.File.ReadAllBytes(fi.Path);
             if (data.Length == 0) { fi.ReadError = L.T("font.p.empty"); return; }
             fi.Faces.AddRange(OpenType.Parse(data));
+            if (fi.Faces.Any(f => f.IsSymbolEncoded)) fi.LegacyConvertible = LegacyArabic.CanConvert(data);
             if (fi.Format == FontFormat.Unknown && fi.Faces.All(f => f.IsCorrupt)) fi.ReadError ??= null;
         }
         catch (Exception e)
@@ -195,7 +198,7 @@ public static class FontInventory
         if (face.IsSymbolEncoded)
         {
             var name = (face.FullName + " " + face.Family + " " + fi.FileName).ToLowerInvariant();
-            r.Arabic = LegacyArabicHints.Any(name.Contains) || name.Any(ch => ch is >= '؀' and <= 'ۿ') ? ArabicSupport.LegacySymbol : ArabicSupport.None;
+            r.Arabic = fi.LegacyConvertible || LegacyArabicHints.Any(name.Contains) || name.Any(ch => ch is >= '؀' and <= 'ۿ') ? ArabicSupport.LegacySymbol : ArabicSupport.None;
         }
         else if (r.ArabicLetters < 20) r.Arabic = ArabicSupport.None;
         else if (hasShaping) r.Arabic = r.ArabicLetters >= 34 ? ArabicSupport.Full : ArabicSupport.Partial;
@@ -239,7 +242,9 @@ public static class FontInventory
         foreach (var f in scan.Faces)
         {
             if (f.Arabic == ArabicSupport.LegacySymbol)
-                scan.Issues.Add(new FontIssue { Severity = Severity.Warning, Code = "legacyArabic", Path = f.File.Path, FontName = f.Name, Fix = FontFix.InstallAlternative, Message = L.T("font.i.legacyArabic") });
+                scan.Issues.Add(new FontIssue { Severity = Severity.Warning, Code = "legacyArabic", Path = f.File.Path, FontName = f.Name,
+                    Fix = f.File.LegacyConvertible ? FontFix.ConvertLegacy : FontFix.InstallAlternative,
+                    Message = L.T(f.File.LegacyConvertible ? "font.i.legacyConvertible" : "font.i.legacyArabic") });
             else if (f.Arabic == ArabicSupport.PresentationFormsOnly)
                 scan.Issues.Add(new FontIssue { Severity = Severity.Warning, Code = "presentationOnly", Path = f.File.Path, FontName = f.Name, Fix = FontFix.InstallAlternative, Message = L.T("font.i.presentationOnly") });
             else if (f.Arabic == ArabicSupport.NoShaping)

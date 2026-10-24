@@ -73,6 +73,73 @@ public static class FontRepair
         return outcome;
     }
 
+    /// <summary>Converts old symbol-encoded Arabic fonts (FS_ and the like) into Unicode fonts whose letters join.
+    /// For each font: the original is backed up, the converted copy is written next to it as "&lt;name&gt;-IBRA.ttf",
+    /// Windows' registry line is pointed at the new file, and the old file is removed (after a restart if Windows holds it).
+    /// The family name stays the same, so designs that already use the font keep working. Undo puts everything back.</summary>
+    public static RepairOutcome ConvertLegacy(IReadOnlyList<FontFileInfo> files, IRegistryAccess? registry = null, IProgress<(int Done, int Total, string Name)>? progress = null)
+    {
+        registry ??= Registries.Default;
+        var outcome = new RepairOutcome();
+        var session = BackupStore.Begin("fonts", "fix.legacy.backup", Keep, Fmt.Count(files.Count));
+        var done = 0;
+        var n = 0;
+        foreach (var f in files)
+        {
+            progress?.Report((++n, files.Count, f.DisplayName));
+            try
+            {
+                RequireRights(f.Path);
+                var data = File.ReadAllBytes(f.Path);
+                var result = LegacyArabic.Convert(data);
+                var dir = Path.GetDirectoryName(f.Path)!;
+                var dest = Path.Combine(dir, Path.GetFileNameWithoutExtension(f.Path) + "-IBRA.ttf");
+                var system = FontInventory.SystemFontsDir is { } sys && Cleaner.Safety.IsInside(f.Path, sys);
+
+                session.AddFileCopy(f.Path);
+                if (File.Exists(dest)) session.AddFileCopy(dest); else session.AddCreatedFile(dest);
+                File.WriteAllBytes(dest, result.Data);
+
+                // Point Windows at the converted file (same registry line names), or register it if it never was.
+                var regs = f.Registrations.ToList();
+                if (regs.Count == 0)
+                    regs.Add(new FontRegistration(system ? Hive.LocalMachine : Hive.CurrentUser, $"{(result.Family.Length > 0 ? result.Family : f.DisplayName)} (TrueType)", "", null));
+                foreach (var reg in regs)
+                {
+                    session.AddRegistry(registry, reg.Hive, FontInventory.FontsKey, reg.Name);
+                    var value = reg.Hive == Hive.LocalMachine && system ? Path.GetFileName(dest) : dest;
+                    registry.Set(reg.Hive, FontInventory.FontsKey, new RegValue(reg.Name, "String", value));
+                }
+                FontSystem.Unload(f.Path);
+                try
+                {
+                    File.SetAttributes(f.Path, FileAttributes.Normal);
+                    File.Delete(f.Path);
+                }
+                catch (IOException e) when (Errors.IsInUse(e))
+                {
+                    outcome.NeedsRestart = true;
+                    ScheduleDelete(f.Path);
+                }
+                FontSystem.Load(dest);
+                done++;
+                outcome.Lines.Add($"✓ {f.DisplayName} — {L.T("fix.legacy.line", result.Letters, result.Joined, result.LamAlefs)} — {dest}");
+            }
+            catch (Exception e)
+            {
+                outcome.Lines.Add($"✗ {f.DisplayName} — {Errors.Friendly(e)}");
+            }
+        }
+        var set = session.Commit();
+        outcome.BackupId = set.Items.Count > 0 ? set.Id : null;
+        outcome.Ok = done == files.Count;
+        FontSystem.Broadcast();
+        if (Platform.IsProcessRunning("Photoshop")) outcome.Lines.Insert(0, L.T("font.photoshopOpen"));
+        outcome.Entry = Journal.Add("fonts", outcome.Ok ? EntryStatus.Success : done > 0 ? EntryStatus.Partial : EntryStatus.Failed,
+            "fix.legacy.journal", outcome.Lines, outcome.BackupId, Fmt.Count(done));
+        return outcome;
+    }
+
     /// <summary>Removes registry lines that point to fonts that no longer exist.</summary>
     public static RepairOutcome RemoveRegistrations(IReadOnlyList<FontRegistration> regs, IRegistryAccess? registry = null)
     {
