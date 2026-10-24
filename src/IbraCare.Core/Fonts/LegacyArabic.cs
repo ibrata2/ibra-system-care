@@ -95,15 +95,9 @@ public static class LegacyArabic
         try
         {
             font = Sfnt.Read(data);
-            if (!font.Has("cmap") || !font.Has("post") || !font.Has("glyf") || !font.Has("loca") || !font.Has("hmtx")) return "legacy.notTrueType";
+            if (!font.Has("cmap") || !font.Has("glyf") || !font.Has("loca") || !font.Has("hmtx") || !font.Has("head") || !font.Has("hhea")) return "legacy.notTrueType";
             if (font.Has("GSUB")) return "legacy.hasLayout";
-            var names = PostNames(font);
-            if (names is null) return "legacy.noNames";
-            var set = names.ToHashSet();
-            var needed = new[] { "alef", "fnalef", "inbaa", "midbaa", "fnbaa", "baa", "lam", "inlam", "meem", "lamelef" };
-            if (!needed.All(set.Contains)) return "legacy.notArabicNames";
-            if (!SymbolCmap(font)) return "legacy.notSymbol";
-            return null;
+            return GlyphNames(font, out _) is null ? "legacy.notArabicNames" : null;
         }
         catch (Exception e) when (e is IndexOutOfRangeException or ArgumentException or InvalidDataException)
         {
@@ -111,19 +105,92 @@ public static class LegacyArabic
         }
     }
 
-    private static bool SymbolCmap(Sfnt f)
+    private static readonly string[] Needed = ["alef", "fnalef", "inbaa", "midbaa", "fnbaa", "baa", "lam", "inlam", "meem", "lamelef"];
+
+    /// <summary>Old position (0xF2xx − 0xF200) → the shape that sits there, for fonts in this encoding (FS_, Al-Hadith, MCS…).</summary>
+    private static readonly string?[] Canonical =
+    [
+        "space", "Allah", null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null,
+        null, "exclam", "quotedbl", "guillemotleft", "guillemotright", "percentarabic", "multiply", "divide",
+        "parenleft.1", "parenright", "asterisk", "plus", "commaarabic", "minus", "period", "slash",
+        "zeroarabic", "onearabic", "twoarabic", "threearabic", "fourarabic", "fivearabic", "sixarabic", "sevenarabic",
+        "eightarabic", "ninearabic", "colon", "semicolonarabic", "quotedblleft", "equal", "quotedblright", "questionarabic",
+        "tatweelwide", "alef", "fnalef", "hamzahonalef", "fnhamzahonalef", "maddahonalef", "fnmaddahonalef", "hamzahunderalef",
+        "fnhamzahunderalef", "inbaa", "midbaa", "fnbaa", "baa", "intaa", "midtaa", "fntaa",
+        "taa", "inthaa", "midthaa", "fnthaa", "thaa", "injeem", "midjeem", "fnjeem",
+        "jeem", "inhaa", "midhaa", "bracketleft", "fnhaa", "bracketright", "comma", "tatweelnarrow",
+        "haa", "inkhaa", "midkhaa", "fnkhaa", "khaa", "dal", "fndal", "thal",
+        "fnthal", "ra", "fnra", "zain", "fnzain", "inseen", "midseen", "fnseen",
+        "seen", "insheen", "midsheen", "fnsheen", "sheen", "insad", "midsad", "fnsad",
+        "sad", "indad", "middad", null, "fndad", null, "dad", "intah",
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null,
+        null, "fntah", "tah", "indhah", "middhah", "fndhah", "dhah", "inain",
+        "midain", "fnain", "ain", "inghain", "midghain", "fnghain", "ghain", "infa",
+        "midfa", "fnfa", "fa", "inqaf", "midqaf", "fnqaf", "qaf", "incaf",
+        "midcaf", "fncaf", "caf", "inlam", "midlam", "fnlam", "lam", "inmeem",
+        "midmeem", "fnmeem", "meem", "innoon", "midnoon", "fnnoon", "noon", "inha",
+        "midha", "fnha", "ha", "waw", "fnwaw", "inya", "midya", "fnya",
+        "ya", "taamarbutah", "fntaamarbutah", "fnalefmaqsurah", "alefmaqsurah", "hamzah", "inhamzahonya", "midhamzahonya",
+        "fnhamzahonya", "hamzahonyah", "hamzahonwaw", "fnhamzahonwaw", "lamelef", "fnlamalef", "hamzahonlamelef", "fnhamzahonlamelef",
+        "maddahonlamelef", "fnmaddahonlamelef", "hamzahunderlamelef", "fnhamzahunderlamelef", "fathah2", "dammah2", "sukun2", "fathatan2",
+        "dammatah2", "shaddah2", "kasrah2", "kasratan2", "fahtanonshaddah2", "dammahonshaddah2", "fathatanonshaddah2", "dammatanonshaddah2",
+        "shaddahonfathah2", "midtah", "fathah", "dammah", "sukun", "fathatan", "dammatah", "shaddah",
+        "kasrah", "kasratan", "fahtanonshaddah", "dammahonshaddah", "fathatanonshaddah", "dammatanonshaddah", "shaddahonfathah", "shaddahonfathatan",
+    ];
+
+    /// <summary>The glyph names to convert with, or null when the font is not an old Arabic font of this kind:
+    /// a font that maps no real Arabic letters but has the old private codes U+F2xx, and either glyph names that follow the
+    /// scheme (FS_, Al-Hadith) or, when the names mean nothing (MCS: "A", "B"…), the standard positions with shapes that fit.</summary>
+    private static string[]? GlyphNames(Sfnt f, out bool byPosition)
     {
-        var d = f.Table("cmap");
-        int n = OpenType.U16(d, 2);
-        var symbol = false;
-        for (var i = 0; i < n; i++)
+        byPosition = false;
+        var map = PrivateMap(f);
+        if (map.Count < 40) return null;
+        if (UnicodeArabicCount(f) > 10) return null; // already a Unicode Arabic font
+        var count = OpenType.U16(f.Table("maxp"), 4);
+        var names = f.Has("post") ? PostNames(f) : null;
+        if (names is not null && names.Length == count && Needed.All(names.Contains)) return names;
+        // By position: every glyph gets the name of the slot it sits in.
+        var byPos = new string[count];
+        for (var i = 0; i < count; i++) byPos[i] = names is not null && i < names.Length ? "old." + names[i] : $"glyph{i}";
+        foreach (var (code, g) in map.OrderByDescending(kv => kv.Key))
         {
-            int p = OpenType.U16(d, 4 + i * 8), e = OpenType.U16(d, 6 + i * 8);
-            if (p == 3 && e is 1 or 10) return false; // already Unicode
-            if (p == 3 && e == 0) symbol = true;
+            var slot = code - 0xF200;
+            if (slot is >= 0 and < 256 && Canonical[slot] is { } n && g < count) byPos[g] = n;
         }
-        return symbol;
+        // The space sits at slot 0x00 in some fonts and 0x20 in others.
+        if (!byPos.Contains("space") && map.TryGetValue(0xF220, out var sp) && sp < count && IsEmptyGlyph(f, sp)) byPos[sp] = "space";
+        if (!Needed.All(byPos.Contains) || !ShapesFit(f, byPos)) return null;
+        byPosition = true;
+        return byPos;
     }
+
+    /// <summary>A safety check before trusting positions: the shapes must look like the letters the layout says they are.</summary>
+    private static bool ShapesFit(Sfnt f, string[] names)
+    {
+        var boxes = Boxes(f, names.Length);
+        Box? B(string n) { var i = Array.IndexOf(names, n); return i >= 0 ? boxes[i] : null; }
+        int W(Box b) => b.XMax - b.XMin;
+        int H(Box b) => b.YMax - b.YMin;
+        var alef = B("alef"); var baa = B("baa"); var inbaa = B("inbaa"); var fnbaa = B("fnbaa"); var lam = B("lam"); var meem = B("meem");
+        if (alef is null || baa is null || inbaa is null || fnbaa is null || lam is null || meem is null) return false;
+        return H(alef) > W(alef) * 1.5          // alef: tall and narrow (even slanted, as in italic fonts)
+            && W(baa) > W(inbaa) * 1.15         // isolated baa: wider than initial baa
+            && W(fnbaa) > W(inbaa) * 1.1
+            && H(lam) > H(baa) * 1.15;          // lam rises above baa
+    }
+
+    /// <summary>Codes U+F200–U+F2FF → glyph, from any Windows or Unicode cmap subtable (symbol or Unicode platform).</summary>
+    private static Dictionary<int, int> PrivateMap(Sfnt f) =>
+        AllCmap(f).Where(kv => kv.Key is >= 0xF200 and <= 0xF2FF).ToDictionary(kv => kv.Key, kv => kv.Value);
+
+    private static int UnicodeArabicCount(Sfnt f) => AllCmap(f).Keys.Count(c => c is >= 0x0621 and <= 0x064A);
 
     /// <summary>Glyph names from a 'post' table version 2.0, or null.</summary>
     public static string[]? PostNames(Sfnt f)
@@ -158,13 +225,15 @@ public static class LegacyArabic
         public int LamAlefs { get; init; }
         public int MarksPositioned { get; init; }
         public string Family { get; init; } = "";
+        /// <summary>The letters were identified by their position (the font's own glyph names mean nothing, as in MCS fonts).</summary>
+        public bool ByPosition { get; init; }
     }
 
     public static Result Convert(byte[] data)
     {
         var why = Analyze(data, out var f);
         if (why is not null || f is null) throw new InvalidDataException(L.T(why ?? "legacy.damaged"));
-        var names = PostNames(f)!;
+        var names = GlyphNames(f, out var byPosition)!;
         var gid = new Dictionary<string, int>();
         for (var i = 0; i < names.Length; i++) gid.TryAdd(names[i], i);
         int G(string n) => gid.TryGetValue(n, out var g) ? g : -1;
@@ -255,11 +324,13 @@ public static class LegacyArabic
         return new Result
         {
             Data = f.Write(), Letters = lettersMapped, Joined = init.Count + medi.Count + fina.Count, LamAlefs = rlig.Count,
-            MarksPositioned = gpos is null ? 0 : positionedMarks.Count, Family = family,
+            MarksPositioned = gpos is null ? 0 : positionedMarks.Count, Family = family, ByPosition = byPosition,
         };
     }
 
-    private static Dictionary<int, int> SymbolMap(Sfnt f)
+    private static Dictionary<int, int> SymbolMap(Sfnt f) => PrivateMap(f);
+
+    private static Dictionary<int, int> AllCmap(Sfnt f)
     {
         var d = f.Table("cmap");
         int n = OpenType.U16(d, 2);
@@ -268,7 +339,7 @@ public static class LegacyArabic
         {
             int p = OpenType.U16(d, 4 + i * 8), e = OpenType.U16(d, 6 + i * 8);
             var off = (int)OpenType.U32(d, 8 + i * 8);
-            if (p != 3 || e != 0 || OpenType.U16(d, off) != 4) continue;
+            if (p is not (0 or 3) || off + 14 > d.Length || OpenType.U16(d, off) != 4) continue;
             int segX2 = OpenType.U16(d, off + 6);
             int ends = off + 14, starts = ends + segX2 + 2, deltas = starts + segX2, ros = deltas + segX2;
             for (var s = 0; s < segX2 / 2; s++)
@@ -288,7 +359,7 @@ public static class LegacyArabic
                         g = OpenType.U16(d, at);
                         if (g != 0) g = (g + delta) & 0xFFFF;
                     }
-                    if (g != 0) result[c] = g;
+                    if (g != 0) result.TryAdd(c, g);
                 }
             }
         }

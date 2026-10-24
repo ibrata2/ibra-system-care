@@ -327,6 +327,23 @@ try
     var shapingCheck = Environment.GetEnvironmentVariable("IBRACARE_SHAPING_OUT");
     if (!string.IsNullOrEmpty(shapingCheck)) File.WriteAllBytes(shapingCheck, conv.Data);
 
+    // MCS fonts: same positions, but the glyph names mean nothing (here: no names at all) and the cmap claims "Unicode".
+    var mcsPath = Path.Combine(dataDir, "LegacyArabicTestMCS.ttf");
+    var mcsBytes = File.ReadAllBytes(mcsPath);
+    Check(LegacyArabic.Analyze(mcsBytes, out _) is null, "an MCS-style font (no names, private codes) is recognised by position");
+    var mcsConv = LegacyArabic.Convert(mcsBytes);
+    var mcsAfter = OpenType.Parse(mcsConv.Data)[0];
+    Check(mcsConv.ByPosition && mcsConv.Joined == conv.Joined && mcsConv.LamAlefs == conv.LamAlefs, $"MCS-style: same result as the named font ({mcsConv.Joined} forms, {mcsConv.LamAlefs} lam-alef)");
+    Check(!mcsAfter.IsCorrupt && mcsAfter.ArabicFeatures.IsSupersetOf(["init", "medi", "fina", "rlig"]) && mcsAfter.Coverage.Contains(0x0627), "MCS-style: valid Unicode font with joining");
+    var mcsOut = Environment.GetEnvironmentVariable("IBRACARE_SHAPING_OUT_MCS");
+    if (!string.IsNullOrEmpty(mcsOut)) File.WriteAllBytes(mcsOut, mcsConv.Data);
+    // A Latin font whose shapes sit at the private codes must not be mistaken for Arabic: the shape check refuses it.
+    var fakeFace = OpenType.Parse(mcsBytes)[0];
+    var mcsFile = new FontFileInfo { Path = mcsPath };
+    FontInventory.Read(mcsFile);
+    Check(mcsFile.LegacyConvertible, "the scan marks an MCS-style font (\"Unicode\" cmap at private codes) as convertible");
+    Check(FontInventory.Analyze(mcsFile, fakeFace).Arabic == ArabicSupport.LegacySymbol, "and reports it as an old Arabic font");
+
     // Through the Font Doctor: scan, convert with backup, registry pointed at the new file, undo.
     var legacyInstalled = Path.Combine(usrFonts, "FS_Test.ttf");
     File.Copy(legacyPath, legacyInstalled, true);

@@ -170,7 +170,9 @@ public static class FontInventory
             var data = System.IO.File.ReadAllBytes(fi.Path);
             if (data.Length == 0) { fi.ReadError = L.T("font.p.empty"); return; }
             fi.Faces.AddRange(OpenType.Parse(data));
-            if (fi.Faces.Any(f => f.IsSymbolEncoded)) fi.LegacyConvertible = LegacyArabic.CanConvert(data);
+            // Old Arabic fonts: no real Arabic letters, shapes at the private codes U+F2xx (symbol cmap, or a "Unicode" one like MCS).
+            if (fi.Faces.Count == 1 && !fi.Faces[0].Coverage.Contains(0x0627) && fi.Faces[0].Coverage.Count(c => c is >= 0xF200 and <= 0xF2FF) >= 40)
+                fi.LegacyConvertible = LegacyArabic.CanConvert(data);
             if (fi.Format == FontFormat.Unknown && fi.Faces.All(f => f.IsCorrupt)) fi.ReadError ??= null;
         }
         catch (Exception e)
@@ -195,7 +197,8 @@ public static class FontInventory
         var hasShaping = a.Contains("init") && a.Contains("medi") && a.Contains("fina");
         var someShaping = a.Contains("init") || a.Contains("medi") || a.Contains("fina") || a.Contains("isol");
 
-        if (face.IsSymbolEncoded)
+        if (fi.LegacyConvertible) r.Arabic = ArabicSupport.LegacySymbol;
+        else if (face.IsSymbolEncoded)
         {
             var name = (face.FullName + " " + face.Family + " " + fi.FileName).ToLowerInvariant();
             r.Arabic = fi.LegacyConvertible || LegacyArabicHints.Any(name.Contains) || name.Any(ch => ch is >= '؀' and <= 'ۿ') ? ArabicSupport.LegacySymbol : ArabicSupport.None;

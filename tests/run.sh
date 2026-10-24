@@ -3,10 +3,11 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 export IBRACARE_SHAPING_OUT="$(mktemp --suffix=.ttf)"
+export IBRACARE_SHAPING_OUT_MCS="$(mktemp --suffix=.ttf)"
 dotnet run -c Release --project "$here/IbraCare.Tests" -- "$here/data" "$@"
 if python3 -c "import uharfbuzz, fontTools" 2>/dev/null; then
   echo; echo "== HarfBuzz shaping of a converted old Arabic font"
-  python3 "$here/check-shaping.py" "$IBRACARE_SHAPING_OUT"
+  python3 "$here/check-shaping.py" "$IBRACARE_SHAPING_OUT" "$IBRACARE_SHAPING_OUT_MCS"
 else
   echo "(skipping the HarfBuzz check: pip install uharfbuzz fonttools)"
 fi

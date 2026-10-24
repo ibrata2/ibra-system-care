@@ -70,3 +70,18 @@ for rec in font["name"].names:
 out = os.path.join(here, "..", "tests", "data", "LegacyArabicTest.ttf")
 font.save(out)
 print("written", out, len(order), "glyphs")
+
+# The MCS variant: same positions, but no usable glyph names (post format 3) and a "Unicode" (3,1) cmap at the private
+# codes, so the converter must identify the letters by their position.
+mcs = TTFont(out)
+mcs["post"].formatType = 3.0
+for t in mcs["cmap"].tables:
+    t.platEncID = 1
+for rec in mcs["name"].names:
+    if rec.platformID == 3:
+        rec.platEncID = 1
+mcs["name"].setName("Legacy Arabic MCS Test", 1, 3, 1, 0x409)
+mcs["name"].setName("Legacy Arabic MCS Test", 4, 3, 1, 0x409)
+out2 = os.path.join(here, "..", "tests", "data", "LegacyArabicTestMCS.ttf")
+mcs.save(out2)
+print("written", out2)

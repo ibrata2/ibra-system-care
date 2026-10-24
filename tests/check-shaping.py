@@ -26,4 +26,18 @@ for text, want in expected.items():
     ok = got == want
     failed += not ok
     print(("  ok   " if ok else "  FAIL ") + f"{text}: {' '.join(got)}")
+# The MCS-style font has no glyph names, so its shaping must give exactly the same glyph ids as the named one.
+if len(sys.argv) > 2:
+    other = hb.Font(hb.Face(hb.Blob.from_file_path(sys.argv[2])))
+    for text in expected:
+        ids = []
+        for f in (font, other):
+            buf = hb.Buffer()
+            buf.add_str(text)
+            buf.guess_segment_properties()
+            hb.shape(f, buf, {})
+            ids.append([i.codepoint for i in buf.glyph_infos])
+        ok = ids[0] == ids[1]
+        failed += not ok
+        print(("  ok   " if ok else "  FAIL ") + f"MCS-style (by position) {text}: same shapes as the named font")
 sys.exit(1 if failed else 0)
