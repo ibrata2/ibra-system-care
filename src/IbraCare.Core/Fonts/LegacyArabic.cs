@@ -62,6 +62,25 @@ public static class LegacyArabic
         ("shaddah", "fathatan", "fathatanonshaddah"), ("shaddah", "dammatah", "dammatanonshaddah"),
     ];
 
+    // slot in the old layout (0xF2xx) → Unicode characters it stands for
+    private static readonly (int Slot, int[] Codes)[] PositionalPunctuation =
+    [
+        (0x21, [0x0021]), (0x22, [0x0022]), (0x23, [0x00AB]), (0x24, [0x00BB]), (0x25, [0x066A, 0x0025]), (0x26, [0x00D7]),
+        (0x27, [0x00F7]), (0x28, [0x0028]), (0x29, [0x0029]), (0x2A, [0x002A]), (0x2B, [0x002B]), (0x2C, [0x060C]),
+        (0x2D, [0x002D, 0x2212, 0x2013, 0x2014]), (0x2E, [0x002E]), (0x2F, [0x002F]), (0x3A, [0x003A]), (0x3B, [0x061B, 0x003B]),
+        (0x3C, [0x201C]), (0x3D, [0x003D]), (0x3E, [0x201D]), (0x3F, [0x061F, 0x003F]), (0x5B, [0x005B]), (0x5D, [0x005D]),
+        (0x5E, [0x002C]), (0x01, [0xFDF2]),
+        (0x30, [0x0660, 0x06F0, 0x0030]), (0x31, [0x0661, 0x06F1, 0x0031]), (0x32, [0x0662, 0x06F2, 0x0032]), (0x33, [0x0663, 0x06F3, 0x0033]),
+        (0x34, [0x0664, 0x06F4, 0x0034]), (0x35, [0x0665, 0x06F5, 0x0035]), (0x36, [0x0666, 0x06F6, 0x0036]), (0x37, [0x0667, 0x06F7, 0x0037]),
+        (0x38, [0x0668, 0x06F8, 0x0038]), (0x39, [0x0669, 0x06F9, 0x0039]),
+    ];
+
+    private static bool IsStandardLayout(Dictionary<int, int> symbol, string[] names)
+    {
+        string? At(int slot) => symbol.TryGetValue(0xF200 + slot, out var g) && g < names.Length ? names[g] : null;
+        return At(0x41) == "alef" && At(0x49) == "inbaa" && At(0x70) == "seen" && At(0xBE) == "lam" && At(0xC2) == "meem" && At(0xDC) == "lamelef";
+    }
+
     public const string VersionTag = "IBRA Unicode";
 
     // ------------------------------------------------------------------ detection
@@ -163,6 +182,14 @@ public static class LegacyArabic
             Map(0x0660 + i, G(Digits[i]));
             Map(0x06F0 + i, G(Digits[i]));
             Map(0x0030 + i, G(Digits[i]));
+        }
+        // Fonts in this family share one layout (alef at 0x41, lam at 0xBE…). Some (e.g. Al-Hadith) carry wrong names on their
+        // punctuation glyphs, so when the layout is the standard one, punctuation and digits are mapped by position instead.
+        if (IsStandardLayout(oldSymbol, names))
+        {
+            foreach (var (slot, codesForSlot) in PositionalPunctuation)
+                if (oldSymbol.TryGetValue(0xF200 + slot, out var pg) && pg > 0 && !IsEmptyGlyph(f, pg))
+                    foreach (var c in codesForSlot) map[c] = pg;
         }
         var lettersMapped = Letters.Count(l => G(l.Iso) > 0);
 

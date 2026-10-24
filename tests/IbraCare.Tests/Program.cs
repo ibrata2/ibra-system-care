@@ -319,6 +319,7 @@ try
     Check(after.ArabicFeatures.IsSupersetOf(["init", "medi", "fina", "rlig"]), $"after: Arabic joining features ({string.Join(" ", after.ArabicFeatures)})");
     Check(after.GposFeatures.Contains("mark"), "after: harakat positioned (GPOS mark)");
     Check(after.Coverage.Contains(0x0627) && after.Coverage.Contains(0x0644) && after.Coverage.Contains(0x0661) && after.Coverage.Contains(0xF241), "after: ا ل ١ mapped, old private codes still mapped");
+    Check(after.Coverage.Contains(0x060C) && after.Coverage.Contains(0x0661) && after.Coverage.Contains(0x0031), "after: punctuation and digits mapped by their standard position (، ١ 1)");
     Check(after.Family == before.Family, "after: same family name, so existing designs keep it");
     Check(after.VersionText.Contains(LegacyArabic.VersionTag), "after: version marked as converted");
     Check(conv.LamAlefs >= 2 && conv.Joined > 20, $"lam-alef ligatures and joining forms built ({conv.LamAlefs}, {conv.Joined})");
