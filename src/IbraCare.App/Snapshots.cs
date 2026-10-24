@@ -133,6 +133,34 @@ public static class SelfTest
             foreach (var i in fonts.Issues.Take(40)) lines.Add($"     issue {i.Severity} {i.Code} {i.FontName} — {i.Path}");
             var ps = PhotoshopDoctor.Diagnose(fonts);
             lines.Add($"     photoshop installs={ps.Installs.Count} findings={ps.Findings.Count}");
+            // Font pack: export two Windows fonts and run the pack's own installer into a test folder (no registry).
+            var packDir = Path.Combine(Path.GetTempPath(), "IBRA-pack-" + Guid.NewGuid().ToString("N")[..6]);
+            Directory.CreateDirectory(packDir);
+            var packScan = new FontScan();
+            foreach (var name in new[] { "arial.ttf", "tahoma.ttf" })
+            {
+                var src = Path.Combine(FontInventory.SystemFontsDir!, name);
+                var copy = Path.Combine(packDir, name);
+                File.Copy(src, copy);
+                var fi = new FontFileInfo { Path = copy, Location = FontLocation.User };
+                FontInventory.Read(fi);
+                packScan.Files.Add(fi);
+            }
+            var zipPath = Path.Combine(packDir, "pack.zip");
+            var packed = FontPack.Export(packScan, new FontPack.Options(), zipPath);
+            Check(packed.Fonts == 2, "a font pack is written");
+            var unpacked = Path.Combine(packDir, "unpacked");
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, unpacked);
+            var installTo = Path.Combine(packDir, "installed");
+            var ps1 = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe",
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{Path.Combine(unpacked, "Install-Fonts.ps1")}\" -FontsDir \"{installTo}\" -NoRegistry")
+                { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true })!;
+            var psOut = ps1.StandardOutput.ReadToEnd();
+            ps1.WaitForExit(60000);
+            lines.Add("     pack installer: " + psOut.Replace("\r", " ").Replace("\n", " | "));
+            Check(ps1.ExitCode == 0 && File.Exists(Path.Combine(installTo, "arial.ttf")) && File.Exists(Path.Combine(installTo, "tahoma.ttf")), "the pack's installer copies the fonts");
+            Directory.Delete(packDir, true);
+
             var file = Reports.Write(scan, fonts, ps, Path.GetTempPath());
             Check(File.Exists(file), "an HTML report is written");
             File.Delete(file);

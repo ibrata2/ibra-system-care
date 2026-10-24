@@ -254,6 +254,7 @@ public static partial class Strings
         A("legacy.notSymbol", "الخط مرمز بـ Unicode أصلاً", "The font is already Unicode-encoded");
         A("legacy.damaged", "ملف الخط تالف", "The font file is damaged");
 
+        A("pack.journal", "حزمة خطوط لحاسبة ثانية: {0} خط", "Font pack for another PC: {0} fonts");
         AddUi(A);
         return t;
     }

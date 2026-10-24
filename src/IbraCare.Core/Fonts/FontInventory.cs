@@ -22,6 +22,8 @@ public sealed class FontFileInfo
     public string? ReadError { get; set; }
     /// <summary>An old symbol-encoded Arabic font (like FS_) that <see cref="LegacyArabic"/> can convert to Unicode.</summary>
     public bool LegacyConvertible { get; set; }
+    /// <summary>Hashes of the letter drawings, to find fonts that look the same under different names.</summary>
+    public HashSet<ulong>? Shapes { get; set; }
 
     public string FileName => System.IO.Path.GetFileName(Path);
     public bool IsCorrupt => ReadError is not null || Faces.Any(f => f.IsCorrupt);
@@ -170,6 +172,7 @@ public static class FontInventory
             var data = System.IO.File.ReadAllBytes(fi.Path);
             if (data.Length == 0) { fi.ReadError = L.T("font.p.empty"); return; }
             fi.Faces.AddRange(OpenType.Parse(data));
+            if (fi.Faces.Count == 1) fi.Shapes = LookAlikes.Fingerprint(data);
             // Old Arabic fonts: no real Arabic letters, shapes at the private codes U+F2xx (symbol cmap, or a "Unicode" one like MCS).
             if (fi.Faces.Count == 1 && !fi.Faces[0].Coverage.Contains(0x0627) && fi.Faces[0].Coverage.Count(c => c is >= 0xF200 and <= 0xF2FF) >= 40)
                 fi.LegacyConvertible = LegacyArabic.CanConvert(data);

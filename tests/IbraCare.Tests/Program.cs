@@ -366,6 +366,45 @@ try
     reg.Delete(Hive.CurrentUser, FontInventory.FontsKey, "Legacy Arabic Test (TrueType)");
 
     // ------------------------------------------------------------------
+    Section("Look-alike fonts and the font pack");
+    var lookDir = Path.Combine(work, "look");
+    Directory.CreateDirectory(lookDir);
+    File.Copy(arabicFont, Path.Combine(lookDir, "NotoArabic.ttf"));
+    File.Copy(arabicFont, Path.Combine(lookDir, "NotoArabic (copy).ttf"));                    // exact copy
+    File.Copy(legacyPath, Path.Combine(lookDir, "OldArabic.ttf"));                            // old encoding…
+    File.WriteAllBytes(Path.Combine(lookDir, "OldArabic-IBRA.ttf"), conv.Data);               // …and its converted twin: same drawings
+    File.Copy(latinFont, Path.Combine(lookDir, "NotoSans.ttf"));                              // different font
+    var lookScan = new FontScan();
+    foreach (var path in Directory.GetFiles(lookDir))
+    {
+        var fi = new FontFileInfo { Path = path, Location = FontLocation.User };
+        FontInventory.Read(fi);
+        lookScan.Files.Add(fi);
+        foreach (var face in fi.Faces.Where(x => !x.IsCorrupt)) lookScan.Faces.Add(FontInventory.Analyze(fi, face));
+    }
+    var lookGroups = LookAlikes.Find(lookScan);
+    var exact = lookGroups.FirstOrDefault(g => g.Files.Any(f => f.FileName == "NotoArabic (copy).ttf"));
+    Check(exact is not null && exact.Kind == "same" && exact.Files.Count == 2, "an exact copy under another file name is found");
+    var twins = lookGroups.FirstOrDefault(g => g.Files.Any(f => f.FileName == "OldArabic.ttf"));
+    Check(twins is not null && twins.Kind == "shapes" && twins.Files.Any(f => f.FileName == "OldArabic-IBRA.ttf"), "the same drawings in a different file (old and converted) are found");
+    Check(twins?.Keep.FileName == "OldArabic-IBRA.ttf", "the Unicode copy is the one recommended to keep");
+    Check(!lookGroups.Any(g => g.Files.Any(f => f.FileName == "NotoSans.ttf")), "a different font is not grouped");
+
+    var packPath = Path.Combine(work, "pack", "fonts.zip");
+    var pack = FontPack.Export(lookScan, new FontPack.Options(), packPath);
+    using (var zip = System.IO.Compression.ZipFile.OpenRead(packPath))
+    {
+        var names = zip.Entries.Select(e => e.FullName).ToList();
+        Check(pack.Fonts == 3 && names.Count(n => n.StartsWith("Fonts/")) == 3, $"pack: one copy per look-alike group ({pack.Fonts} fonts: {string.Join(", ", names.Where(n => n.StartsWith("Fonts/")))})");
+        Check(names.Contains("Install-Fonts.ps1") && names.Contains("fonts.json") && names.Any(n => n.EndsWith(".cmd")) && names.Contains("README.txt"), "pack: installer, list and readme included");
+        var json = new StreamReader(zip.GetEntry("fonts.json")!.Open()).ReadToEnd();
+        Check(json.Contains("TrueType") && names.All(n => !n.StartsWith("Fonts/") || json.Contains(n["Fonts/".Length..])), "pack: every font is listed with its name for the registry");
+    }
+    var pack2 = FontPack.Export(lookScan, new FontPack.Options { SkipLookAlikes = false }, Path.Combine(work, "pack", "all.zip"));
+    Check(pack2.Fonts == 5 && pack2.Converted == 1, $"pack without de-duplication: every font, the old one converted inside ({pack2.Fonts}, {pack2.Converted})");
+    Check(File.Exists(Path.Combine(lookDir, "OldArabic.ttf")) && File.ReadAllBytes(Path.Combine(lookDir, "OldArabic.ttf")).SequenceEqual(legacyBytes), "pack: the original files are not changed");
+
+    // ------------------------------------------------------------------
     Section("Reports and backups");
     L.Language = "en";
     var html = Reports.Build(report, fonts, ps);

@@ -22,9 +22,10 @@ public sealed class FontsPage : CarePage
     {
         Rows(Auto, Auto, Auto, Auto, Star);
         _scan = Ui.Button(L.T("fonts.scan"), "", Theme.PrimaryButton, async () => await Scan());
-        Children.Add(PageHeader("IBRA Font Doctor", L.T("fonts.subtitle"), _scan));
+        var pack = Ui.Button(L.T("pack.button"), "\uE8B7", Theme.Button, () => PackWindow.Show(Window.GetWindow(this), _scanResult));
+        Children.Add(PageHeader("IBRA Font Doctor", L.T("fonts.subtitle"), pack, _scan));
         Children.Add(_status.At(0, 1));
-        _tabs = Common.Tabs(i => { _tab = i; Render(); }, L.T("fonts.tabProblems"), L.T("fonts.tabAll"), "Photoshop", L.T("fonts.tabTrusted"));
+        _tabs = Common.Tabs(i => { _tab = i; Render(); }, L.T("fonts.tabProblems"), L.T("fonts.tabAll"), L.T("fonts.tabLookAlikes"), "Photoshop", L.T("fonts.tabTrusted"));
         Children.Add(_tabs.At(0, 2));
         Children.Add(_body.At(0, 4));
         _scanResult = AppState.LastFonts;
@@ -64,7 +65,7 @@ public sealed class FontsPage : CarePage
 
     private void Render()
     {
-        if (_tab == 3) { _body.Child = new TrustedFontsView(this, _scanResult); return; }
+        if (_tab == 4) { _body.Child = new TrustedFontsView(this, _scanResult); return; }
         if (_scanResult is null)
         {
             _body.Child = Common.Empty("", L.T("fonts.empty"));
@@ -74,6 +75,7 @@ public sealed class FontsPage : CarePage
         {
             0 => ProblemsView(),
             1 => new AllFontsView(this, _scanResult),
+            2 => new LookAlikesView(this, _scanResult),
             _ => PhotoshopView(),
         };
     }
@@ -203,7 +205,7 @@ public sealed class FontsPage : CarePage
         lines.Add(L.T("fonts.altToInstall"));
         lines.AddRange(toInstall.Take(15).Select(c => $"   + {c.Family} — {c.Note}"));
         if (Ui.Ask(null, L.T("fonts.alternatives"), L.T("fonts.altText"), lines, L.T("fonts.openTrusted"), L.T("ui.close")) == 0)
-            ((RadioButton)_tabs.Children[3]).IsChecked = true;
+            ((RadioButton)_tabs.Children[4]).IsChecked = true;
     }
 
     // ---------- Photoshop ----------
@@ -451,15 +453,16 @@ public sealed class AllFontsView : Grid
         };
 
     /// <summary>The font drawn from its own file (so a duplicate shows its own copy), falling back to the family name.</summary>
-    public static FontFamily PreviewFamily(FontFileInfo file, FaceReport face)
+    public static FontFamily PreviewFamily(FontFileInfo file, FaceReport face) => PreviewFamily(file, face.Face.Family.Length > 0 ? face.Face.Family : face.Family);
+
+    public static FontFamily PreviewFamily(FontFileInfo file, string name)
     {
         try
         {
             var dir = Path.GetDirectoryName(file.Path)!.Replace('\\', '/');
-            var name = face.Face.Family.Length > 0 ? face.Face.Family : face.Family;
             return new FontFamily(new Uri("file:///" + dir.TrimEnd('/') + "/"), "./" + Path.GetFileName(file.Path) + "#" + name);
         }
-        catch (Exception) { return new FontFamily(face.Family); }
+        catch (Exception) { return new FontFamily(name); }
     }
 }
 
